@@ -22,7 +22,9 @@ dependencies {
 	platformBungee project(":core:core-platform-bungee")
 	platformVelocity project(":core:core-platform-velocity")
 	implementation(libs.asm)
-	implementation(libs.sshd.core)
+	implementation(libs.sshd.core) {
+		exclude group: "org.slf4j", module: "slf4j-api"
+	}
 	compileOnly(libs.bundles.netty.all)
 	compileOnly(libs.jsr305)
 	compileOnly(libs.gson)
