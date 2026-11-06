@@ -435,6 +435,12 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 						+ "Disable forward_secret for listener '" + selectedListener.getName() + "'.");
 				return;
 			}
+			if (selectedListenerConfig != null && !selectedListenerConfig.isForwardIP()) {
+				logger().warn("tunnl.gg is a reverse proxy. With forward_ip=false, Eaglercraft connections may all "
+						+ "appear to come from tunnl.gg's IP. To forward visitor IPs, enable forward_ip and set "
+						+ "forward_ip_header to X-Forwarded-For. Only trust this header if direct access to this "
+						+ "listener is restricted to trusted sources.");
+			}
 			if (selectedListenerConfig != null && selectedListenerConfig.isForwardIP()
 					&& !"X-Forwarded-For".equalsIgnoreCase(selectedListenerConfig.getForwardIPHeader())) {
 				logger().warn("tunnl.gg forwards visitor IPs in X-Forwarded-For. Set forward_ip_header to "
