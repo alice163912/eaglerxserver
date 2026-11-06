@@ -16,7 +16,12 @@
 
 package net.lax1dude.eaglercraft.backend.server.bukkit;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -25,7 +30,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import org.bukkit.Server;
@@ -142,6 +149,13 @@ public class PlatformPluginBukkit extends JavaPlugin implements IPlatform<Player
 	protected boolean enableNativeTransport;
 	protected EventLoopGroup eventLoopGroup;
 	protected PlayerPostLoginInjector postLoginInjector;
+
+	// Optional TCP forwarder: Eaglercraft clients connect to 25566 and are
+	// forwarded to the normal Paper listener, where EaglerXServer handles login.
+	private static final int EAGLER_FORWARD_PORT = 25566;
+	private volatile ServerSocket eaglerForwardServer;
+	private volatile Thread eaglerForwardThread;
+	private final Set<Socket> eaglerForwardSockets = ConcurrentHashMap.newKeySet();
 
 	private final ConcurrentMap<Player, BukkitPlayer> playerInstanceMap = (new MapMaker()).initialCapacity(512)
 			.concurrencyLevel(16).makeMap();
@@ -389,7 +403,150 @@ public class PlatformPluginBukkit extends JavaPlugin implements IPlatform<Player
 			onServerEnable.run();
 		}
 
+		startEaglerForwarder();
 		aborted = false;
+	}
+
+
+	/**
+	 * Opens a second TCP entry point for Eaglercraft. The connection is
+	 * forwarded byte-for-byte to the normal Paper port so the existing
+	 * EaglerXServer pipeline and Minecraft login machinery remain in use.
+	 *
+	 * Note: Paper sees the proxy-side address (loopback) as the TCP peer.
+	 */
+	private void startEaglerForwarder() {
+		Server server = getServer();
+		int targetPort = server.getPort();
+		if (targetPort == EAGLER_FORWARD_PORT) {
+			getLogger().warning("Eaglercraft forwarding disabled: server-port is already " + EAGLER_FORWARD_PORT);
+			return;
+		}
+		try {
+			ServerSocket forwardServer = new ServerSocket();
+			forwardServer.setReuseAddress(true);
+			String bindAddress = server.getIp();
+			InetSocketAddress bind = bindAddress == null || bindAddress.isBlank()
+					? new InetSocketAddress(EAGLER_FORWARD_PORT)
+					: new InetSocketAddress(bindAddress, EAGLER_FORWARD_PORT);
+			forwardServer.bind(bind, 128);
+			eaglerForwardServer = forwardServer;
+			Thread acceptThread = new Thread(() -> {
+				while (!forwardServer.isClosed()) {
+					try {
+						Socket client = forwardServer.accept();
+						client.setTcpNoDelay(true);
+						Thread handler = new Thread(() -> handleEaglerForward(client, bindAddress, targetPort),
+								"EaglerXServer-Forward-Client");
+						handler.setDaemon(true);
+						handler.start();
+					} catch (IOException ex) {
+						if (!forwardServer.isClosed()) {
+							getLogger().warning("Eaglercraft forwarder accept failed: " + ex.getMessage());
+						}
+						break;
+					}
+				}
+			}, "EaglerXServer-Forward-Acceptor");
+			acceptThread.setDaemon(true);
+			eaglerForwardThread = acceptThread;
+			acceptThread.start();
+			getLogger().info("Eaglercraft WebSocket TCP forwarding enabled on port " + EAGLER_FORWARD_PORT
+					+ " -> 127.0.0.1:" + targetPort
+					+ ". Forwarded players will appear to originate from localhost.");
+		} catch (IOException ex) {
+			getLogger().severe("Could not open Eaglercraft forwarding port " + EAGLER_FORWARD_PORT
+					+ ": " + ex.getMessage());
+			getLogger().severe("Make sure the port is free and allow TCP " + EAGLER_FORWARD_PORT
+					+ " through your firewall.");
+		}
+	}
+
+	private void handleEaglerForward(Socket client, String bindAddress, int targetPort) {
+		Socket upstream = new Socket();
+		AtomicBoolean closed = new AtomicBoolean(false);
+		try {
+			String targetAddress = bindAddress == null || bindAddress.isBlank() ? "127.0.0.1" : bindAddress;
+			upstream.connect(new InetSocketAddress(targetAddress, targetPort), 5000);
+			upstream.setTcpNoDelay(true);
+			eaglerForwardSockets.add(client);
+			eaglerForwardSockets.add(upstream);
+			Socket destination = upstream;
+			Socket source = client;
+			Thread clientToServer = new Thread(
+					() -> copyEaglerTraffic(source, destination, closed), "EaglerXServer-Forward-C2S");
+			Thread serverToClient = new Thread(
+					() -> copyEaglerTraffic(destination, source, closed), "EaglerXServer-Forward-S2C");
+			clientToServer.setDaemon(true);
+			serverToClient.setDaemon(true);
+			clientToServer.start();
+			serverToClient.start();
+			clientToServer.join();
+			serverToClient.join();
+		} catch (IOException ex) {
+			if (!client.isClosed()) {
+				getLogger().fine("Eaglercraft forwarded connection closed: " + ex.getMessage());
+			}
+		} catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+		} finally {
+			closeForwardSocket(client);
+			closeForwardSocket(upstream);
+			if (closed.compareAndSet(false, true)) {
+				// Both directions have ended; this flag also prevents redundant closes.
+			}
+		}
+	}
+
+	private void copyEaglerTraffic(Socket source, Socket destination, AtomicBoolean closed) {
+		try {
+			InputStream input = source.getInputStream();
+			OutputStream output = destination.getOutputStream();
+			byte[] buffer = new byte[8192];
+			int count;
+			while ((count = input.read(buffer)) != -1) {
+				output.write(buffer, 0, count);
+				output.flush();
+			}
+			try {
+				destination.shutdownOutput();
+			} catch (IOException ignored) {
+			}
+		} catch (IOException ex) {
+			if (closed.compareAndSet(false, true)) {
+				closeForwardSocket(source);
+				closeForwardSocket(destination);
+			}
+		}
+	}
+
+	private void closeForwardSocket(Socket socket) {
+		if (socket != null) {
+			eaglerForwardSockets.remove(socket);
+			try {
+				socket.close();
+			} catch (IOException ignored) {
+			}
+		}
+	}
+
+	private void stopEaglerForwarder() {
+		ServerSocket forwardServer = eaglerForwardServer;
+		eaglerForwardServer = null;
+		if (forwardServer != null) {
+			try {
+				forwardServer.close();
+			} catch (IOException ignored) {
+			}
+		}
+		Thread thread = eaglerForwardThread;
+		eaglerForwardThread = null;
+		if (thread != null) {
+			thread.interrupt();
+		}
+		for (Socket socket : eaglerForwardSockets.toArray(new Socket[0])) {
+			closeForwardSocket(socket);
+		}
 	}
 
 	@Override
@@ -397,6 +554,7 @@ public class PlatformPluginBukkit extends JavaPlugin implements IPlatform<Player
 		if (aborted) {
 			return;
 		}
+		stopEaglerForwarder();
 		if (cleanupListeners != null) {
 			cleanupListeners.run();
 			cleanupListeners = null;
