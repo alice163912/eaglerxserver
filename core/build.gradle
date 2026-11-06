@@ -22,6 +22,7 @@ dependencies {
 	platformBungee project(":core:core-platform-bungee")
 	platformVelocity project(":core:core-platform-velocity")
 	implementation(libs.asm)
+	implementation(libs.sshd.core)
 	compileOnly(libs.bundles.netty.all)
 	compileOnly(libs.jsr305)
 	compileOnly(libs.gson)
@@ -54,6 +55,7 @@ tasks.named("shadowJar", com.github.jengelman.gradle.plugins.shadow.tasks.Shadow
 	embedSQLiteJar(it)
 	archiveFileName = "EaglerXServer.jar"
 	relocate "org.objectweb.asm", "net.lax1dude.eaglercraft.backend.server.libs.asm"
+	relocate "org.apache.sshd", "net.lax1dude.eaglercraft.backend.server.libs.sshd"
 }
 
 tasks.register("shadowJarBukkit", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
