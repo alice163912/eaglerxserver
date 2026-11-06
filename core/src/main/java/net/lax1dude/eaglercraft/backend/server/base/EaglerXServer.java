@@ -424,6 +424,24 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 				}
 			}
 
+			ConfigDataListener selectedListenerConfig = config.getListeners().get(selectedListener.getName());
+			if (selectedListenerConfig != null && selectedListenerConfig.isEnableTLS()) {
+				logger().error("tunnl.gg terminates HTTPS at its edge and forwards plain HTTP to EaglerXServer. "
+						+ "Disable tls_config.enable_tls for listener '" + selectedListener.getName() + "'.");
+				return;
+			}
+			if (selectedListenerConfig != null && selectedListenerConfig.isForwardSecret()) {
+				logger().error("tunnl.gg cannot add EaglerXServer's custom forwarding-secret header. "
+						+ "Disable forward_secret for listener '" + selectedListener.getName() + "'.");
+				return;
+			}
+			if (selectedListenerConfig != null && selectedListenerConfig.isForwardIP()
+					&& !"X-Forwarded-For".equalsIgnoreCase(selectedListenerConfig.getForwardIPHeader())) {
+				logger().warn("tunnl.gg forwards visitor IPs in X-Forwarded-For. Set forward_ip_header to "
+						+ "X-Forwarded-For on listener '" + selectedListener.getName()
+						+ "' if you want EaglerXServer to use the real visitor IP.");
+			}
+
 			tunnlGGService = new TunnlGGService(logger(), platform.getDataFolder(),
 					selectedListener.getAddress(), selectedListener.getName());
 			tunnlGGService.start();
