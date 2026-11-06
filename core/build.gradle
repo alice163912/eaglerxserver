@@ -68,6 +68,7 @@ tasks.register("shadowJarBukkit", com.github.jengelman.gradle.plugins.shadow.tas
 	embedSQLiteJar(it)
 	archiveFileName = "EaglerXServer-Bukkit.jar"
 	relocate "org.objectweb.asm", "net.lax1dude.eaglercraft.backend.server.libs.asm"
+	relocate "org.apache.sshd", "net.lax1dude.eaglercraft.backend.server.libs.sshd"
 }
 
 tasks.register("shadowJarBungee", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
@@ -80,6 +81,7 @@ tasks.register("shadowJarBungee", com.github.jengelman.gradle.plugins.shadow.tas
 	embedSQLiteJar(it)
 	archiveFileName = "EaglerXServer-Bungee.jar"
 	relocate "org.objectweb.asm", "net.lax1dude.eaglercraft.backend.server.libs.asm"
+	relocate "org.apache.sshd", "net.lax1dude.eaglercraft.backend.server.libs.sshd"
 }
 
 tasks.register("shadowJarVelocity", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
@@ -92,4 +94,5 @@ tasks.register("shadowJarVelocity", com.github.jengelman.gradle.plugins.shadow.t
 	embedSQLiteJar(it)
 	archiveFileName = "EaglerXServer-Velocity.jar"
 	relocate "org.objectweb.asm", "net.lax1dude.eaglercraft.backend.server.libs.asm"
+	relocate "org.apache.sshd", "net.lax1dude.eaglercraft.backend.server.libs.sshd"
 }
