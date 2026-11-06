@@ -122,19 +122,27 @@ public class PlayerPostLoginInjector {
 			Field channelField = null;
 			for (Field f : netManagerClass.getDeclaredFields()) {
 				Class<?> clz = f.getType();
-				if (clz.getSimpleName().equals("EnumProtocolDirection")) {
+				String typeName = clz.getSimpleName();
+				// Mojang renamed the connection direction enum across Minecraft versions:
+				// EnumProtocolDirection (older), PacketFlow, and NetworkSide (newer).
+				if (clz.isEnum() && (typeName.equals("EnumProtocolDirection")
+						|| typeName.equals("PacketFlow") || typeName.equals("NetworkSide"))) {
 					f.setAccessible(true);
-					protocolDirType = (Class<Object>) f.getType();
+					protocolDirType = (Class<Object>) clz;
 					protocolDirField = f;
 					break;
 				}
 			}
-			for (Field f : netManagerClass.getFields()) {
-				Class<?> clz = f.getType();
-				if (Channel.class.isAssignableFrom(clz)) {
-					f.setAccessible(true);
-					channelField = f;
-					break;
+			// The channel field is private in modern Mojang-mapped server versions.
+			// getFields() only returns public fields, so inspect declared fields instead.
+			for (Class<?> current = netManagerClass; current != null && channelField == null;
+					current = current.getSuperclass()) {
+				for (Field f : current.getDeclaredFields()) {
+					if (Channel.class.isAssignableFrom(f.getType())) {
+						f.setAccessible(true);
+						channelField = f;
+						break;
+					}
 				}
 			}
 			if (protocolDirField == null) {
