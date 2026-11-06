@@ -107,6 +107,7 @@ import net.lax1dude.eaglercraft.backend.server.base.supervisor.SupervisorService
 import net.lax1dude.eaglercraft.backend.server.base.update.IUpdateCertificateImpl;
 import net.lax1dude.eaglercraft.backend.server.base.update.UpdateCertificate;
 import net.lax1dude.eaglercraft.backend.server.base.update.UpdateService;
+import net.lax1dude.eaglercraft.backend.server.base.tunnel.TunnlGGService;
 import net.lax1dude.eaglercraft.backend.server.base.voice.IVoiceServiceImpl;
 import net.lax1dude.eaglercraft.backend.server.base.voice.VoiceServiceDisabled;
 import net.lax1dude.eaglercraft.backend.server.base.voice.VoiceServiceLocal;
@@ -152,6 +153,7 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 	private ExtCapabilityMap extCapabilityMap;
 	private SSLCertificateManager certificateManager;
 	private IPlatformTask certificateRefreshTask;
+	private TunnlGGService tunnlGGService;
 	private String serverListConfirmCode;
 	private Class<?> componentType;
 	private Set<Class<?>> componentTypeSet;
@@ -401,12 +403,43 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 		return certificateManager;
 	}
 
+	private void startTunnlGGService() {
+		try {
+			TunnlGGService.Config tunnelConfig = TunnlGGService.loadConfig(platform.getDataFolder(), logger());
+			if (!tunnelConfig.enabled) {
+				logger().info("tunnl.gg integration is disabled in tunnl.properties");
+				return;
+			}
+
+			EaglerListener selectedListener = listeners.get(tunnelConfig.listenerName);
+			if (selectedListener == null) {
+				if (listeners.size() == 1) {
+					selectedListener = listeners.values().iterator().next();
+					logger().warn("tunnl.gg listener '" + tunnelConfig.listenerName
+							+ "' was not found; using the only configured listener '" + selectedListener.getName() + "'");
+				} else {
+					logger().error("tunnl.gg could not find listener '" + tunnelConfig.listenerName
+							+ "'. Set the listener property in tunnl.properties to a configured listener name.");
+					return;
+				}
+			}
+
+			tunnlGGService = new TunnlGGService(logger(), platform.getDataFolder(),
+					selectedListener.getAddress(), selectedListener.getName());
+			tunnlGGService.start();
+		} catch (Exception ex) {
+			logger().error("Could not initialize the tunnl.gg integration", ex);
+		}
+	}
+
 	private void enableHandler() {
 		if (platformType != EnumPlatformType.BUKKIT) {
 			logger().info("Enabling " + getServerBrand() + " " + getServerVersion() + "...");
 		}
 
 		webServer.refreshBuiltinPages();
+
+		startTunnlGGService();
 
 		if (certificateManager.hasRefreshableFiles()) {
 			long refreshRate = Math.max(config.getSettings().getTLSCertRefreshRate(), 1) * 1000l;
@@ -470,6 +503,11 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 	private void disableHandler() {
 		if (platformType != EnumPlatformType.BUKKIT) {
 			logger().info("Disabling " + getServerBrand() + " " + getServerVersion() + "...");
+		}
+
+		if (tunnlGGService != null) {
+			tunnlGGService.close();
+			tunnlGGService = null;
 		}
 
 		webServer.releaseBuiltinPages();
