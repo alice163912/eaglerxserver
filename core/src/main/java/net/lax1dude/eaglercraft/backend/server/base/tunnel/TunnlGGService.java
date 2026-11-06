@@ -96,7 +96,6 @@ public final class TunnlGGService implements AutoCloseable {
         } else {
             properties.setProperty("enabled", "true");
             properties.setProperty("listener", "default");
-            properties.setProperty("stable_url", "true");
             try (var output = Files.newOutputStream(configFile.toPath())) {
                 properties.store(output,
                         "tunnl.gg integration. This exposes your Eaglercraft listener publicly.");
@@ -105,11 +104,6 @@ public final class TunnlGGService implements AutoCloseable {
         }
 
         boolean enabled = Boolean.parseBoolean(properties.getProperty("enabled", "true").trim());
-        boolean stable = Boolean.parseBoolean(properties.getProperty("stable_url", "true").trim());
-        if (!stable) {
-            logger.warn("tunnl.gg currently uses a stable URL automatically; stable_url=false is ignored.");
-        }
-
         String listener = properties.getProperty("listener", "default").trim();
         if (listener.isEmpty()) {
             listener = "default";
