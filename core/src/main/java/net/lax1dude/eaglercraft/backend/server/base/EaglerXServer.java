@@ -78,6 +78,7 @@ import net.lax1dude.eaglercraft.backend.server.api.skins.TexturesProperty;
 import net.lax1dude.eaglercraft.backend.server.base.collect.HPPCFactory;
 import net.lax1dude.eaglercraft.backend.server.base.command.CommandBrand;
 import net.lax1dude.eaglercraft.backend.server.base.command.CommandConfirmCode;
+import net.lax1dude.eaglercraft.backend.server.base.command.CommandTunnel;
 import net.lax1dude.eaglercraft.backend.server.base.command.CommandDomain;
 import net.lax1dude.eaglercraft.backend.server.base.command.CommandProtocol;
 import net.lax1dude.eaglercraft.backend.server.base.command.CommandUserAgent;
@@ -335,7 +336,8 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 		init.setServerJoinListener(new EaglerXServerJoinListener<>(this));
 		init.setCommandRegistry(
 				Arrays.asList(new CommandVersion<>(this), new CommandBrand<>(this), new CommandProtocol<>(this),
-						new CommandDomain<>(this), new CommandUserAgent<>(this), new CommandConfirmCode<>(this)));
+						new CommandDomain<>(this), new CommandUserAgent<>(this), new CommandConfirmCode<>(this),
+						new CommandTunnel<>(this)));
 
 		if (platform.getType().proxy) {
 			loadProxying((IPlatform.InitProxying<PlayerObject>) init);
@@ -401,6 +403,11 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 
 	public SSLCertificateManager getCertificateManager() {
 		return certificateManager;
+	}
+
+	/** Returns the public tunnl.gg WebSocket address once the tunnel has been announced. */
+	public String getTunnlGGWebSocketAddress() {
+		return tunnlGGService != null ? tunnlGGService.getPublicWebSocketAddress() : null;
 	}
 
 	private void startTunnlGGService() {
