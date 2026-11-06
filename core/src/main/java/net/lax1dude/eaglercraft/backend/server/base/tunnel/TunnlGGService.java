@@ -40,7 +40,7 @@ import net.lax1dude.eaglercraft.backend.server.adapter.IPlatformLogger;
 
 /**
  * Opens a persistent SSH reverse tunnel to tunnl.gg without requiring an
- * operating-system SSH executable. A generated Ed25519 identity is stored in
+ * operating-system SSH executable. A generated RSA-3072 identity is stored in
  * the plugin data folder and reused to preserve the stable public URL.
  */
 public final class TunnlGGService implements AutoCloseable {
