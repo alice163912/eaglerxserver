@@ -3,7 +3,7 @@ name: Build EaglerXServer
 on:
   push:
     branches:
-      - feature/tunnl-gg-integration
+      - main
   workflow_dispatch:
 
 concurrency:
