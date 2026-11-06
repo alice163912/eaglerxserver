@@ -6,12 +6,17 @@ on:
       - feature/tunnl-gg-integration
   workflow_dispatch:
 
+concurrency:
+  group: eaglerxserver-build-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@v4
