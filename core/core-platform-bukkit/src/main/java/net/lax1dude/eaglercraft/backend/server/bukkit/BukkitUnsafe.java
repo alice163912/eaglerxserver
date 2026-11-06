@@ -26,6 +26,8 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 import org.bukkit.Server;
@@ -44,6 +46,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
 import io.papermc.paper.network.ChannelInitializeListener;
 import net.lax1dude.eaglercraft.backend.server.adapter.IEaglerXServerListener;
 import net.lax1dude.eaglercraft.backend.server.util.ChannelInitializerHijacker;
@@ -541,86 +544,110 @@ public class BukkitUnsafe {
 				"Could not find field with type " + fieldType + " in class " + clazz.getName() + " (or parents)");
 	}
 
+	private static final Set<EventLoopGroup> OWNED_EVENT_LOOP_GROUPS = ConcurrentHashMap.newKeySet();
+
+	/**
+	 * Paper has changed the internal names of its server property accessors several
+	 * times. Native transport is an optimization, so if the property cannot be read
+	 * we safely fall back to Netty NIO instead of aborting plugin loading.
+	 */
 	public static boolean isEnableNativeTransport(Server server) {
 		try {
 			Object dedicatedPlayerList = server.getClass().getMethod("getHandle").invoke(server);
 			Object dedicatedServer = dedicatedPlayerList.getClass().getMethod("getServer").invoke(dedicatedPlayerList);
-			Object propertyManager = dedicatedServer.getClass().getMethod("getPropertyManager").invoke(dedicatedServer);
-			Method getBoolean = Util.findDeclaredMethod(propertyManager.getClass(), "getBoolean", String.class, boolean.class);
-			getBoolean.setAccessible(true);
-			return (Boolean) getBoolean.invoke(propertyManager, "use-native-transport", true);
-		} catch (ReflectiveOperationException e) {
-			try {
-				Object dedicatedPlayerList = server.getClass().getMethod("getHandle").invoke(server);
-				Object dedicatedServer = dedicatedPlayerList.getClass().getMethod("getServer").invoke(dedicatedPlayerList);
-				Object propertyManager = dedicatedServer.getClass().getMethod("getDedicatedServerProperties").invoke(dedicatedServer);
-				Method getBoolean = Util.findDeclaredMethod(propertyManager.getClass(), "getBoolean", String.class, boolean.class);
-				getBoolean.setAccessible(true);
-				return (Boolean) getBoolean.invoke(propertyManager, "use-native-transport", true);
-			} catch (Exception e1) {
-				throw Util.propagateReflectThrowable(e1);
+
+			for (String accessor : new String[] { "getPropertyManager", "getDedicatedServerProperties" }) {
+				try {
+					Object propertyManager = dedicatedServer.getClass().getMethod(accessor).invoke(dedicatedServer);
+					Method getBoolean = Util.findDeclaredMethod(propertyManager.getClass(), "getBoolean", String.class, boolean.class);
+					getBoolean.setAccessible(true);
+					return (Boolean) getBoolean.invoke(propertyManager, "use-native-transport", true);
+				} catch (NoSuchMethodException ignored) {
+					// Try the next name used by another Minecraft/Paper generation.
+				}
 			}
+		} catch (ReflectiveOperationException | RuntimeException ex) {
+			server.getLogger().warning("[EaglerXServer] Could not inspect Paper native transport settings; using Netty NIO instead: " + ex.getClass().getSimpleName());
+			return false;
 		}
+		server.getLogger().info("[EaglerXServer] Paper does not expose a compatible native transport property accessor; using Netty NIO.");
+		return false;
 	}
 
 	public static EventLoopGroup getEventLoopGroup(Server server, boolean enableNativeTransport) {
-		Class<?> serverConnection;
 		try {
 			Object dedicatedPlayerList = server.getClass().getMethod("getHandle").invoke(server);
 			Object minecraftServer = dedicatedPlayerList.getClass().getMethod("getServer").invoke(dedicatedPlayerList);
-			serverConnection = minecraftServer.getClass().getMethod("getServerConnection").getReturnType();
-		} catch (ReflectiveOperationException e) {
-			throw Util.propagateReflectThrowable(e);
+			Method connectionAccessor;
+			try {
+				connectionAccessor = minecraftServer.getClass().getMethod("getConnection");
+			} catch (NoSuchMethodException ignored) {
+				connectionAccessor = minecraftServer.getClass().getMethod("getServerConnection");
+			}
+			EventLoopGroup group = getEventLoopGroup(connectionAccessor.getReturnType(), enableNativeTransport);
+			if (group != null) {
+				return group;
+			}
+		} catch (ReflectiveOperationException | RuntimeException ex) {
+			server.getLogger().warning("[EaglerXServer] Paper's internal event loop could not be accessed; creating a dedicated Netty event loop.");
 		}
-		return getEventLoopGroup(serverConnection, enableNativeTransport);
+		return createOwnEventLoopGroup(enableNativeTransport);
 	}
 
 	public static EventLoopGroup getEventLoopGroup(Class<?> serverConnection, boolean enableNativeTransport) {
 		Field[] fields = serverConnection.getFields();
 		if (enableNativeTransport) {
-			for (Field field : fields) {
-				Class<?> clz = field.getType();
-				if (clz.getSimpleName().equals("LazyInitVar")) {
-					Type type = field.getGenericType();
-					if (type instanceof ParameterizedType tt) {
-						Type[] args = tt.getActualTypeArguments();
-						if (args.length == 1
-								&& "io.netty.channel.epoll.EpollEventLoopGroup".equals(args[0].getTypeName())) {
-							for (Method m : clz.getMethods()) {
-								if (m.getGenericReturnType() != m.getReturnType()) {
-									try {
-										return (EventLoopGroup) m.invoke(field.get(null));
-									} catch (ReflectiveOperationException e) {
-										throw Util.propagateReflectThrowable(e);
-									}
-								}
-							}
-						}
-					}
-				}
+			EventLoopGroup group = findEventLoopGroup(fields, "io.netty.channel.epoll.EpollEventLoopGroup");
+			if (group != null) {
+				return group;
 			}
 		}
+		return findEventLoopGroup(fields, "io.netty.channel.nio.NioEventLoopGroup");
+	}
+
+	private static EventLoopGroup findEventLoopGroup(Field[] fields, String expectedType) {
 		for (Field field : fields) {
-			Class<?> clz = field.getType();
-			if (clz.getSimpleName().equals("LazyInitVar")) {
-				Type type = field.getGenericType();
-				if (type instanceof ParameterizedType tt) {
-					Type[] args = tt.getActualTypeArguments();
-					if (args.length == 1 && "io.netty.channel.nio.NioEventLoopGroup".equals(args[0].getTypeName())) {
-						for (Method m : clz.getMethods()) {
-							if (m.getGenericReturnType() != m.getReturnType()) {
-								try {
-									return (EventLoopGroup) m.invoke(field.get(null));
-								} catch (ReflectiveOperationException e) {
-									throw Util.propagateReflectThrowable(e);
-								}
-							}
-						}
-					}
+			Class<?> fieldClass = field.getType();
+			if (!fieldClass.getSimpleName().equals("LazyInitVar")) {
+				continue;
+			}
+			Type genericType = field.getGenericType();
+			if (!(genericType instanceof ParameterizedType parameterized)) {
+				continue;
+			}
+			Type[] args = parameterized.getActualTypeArguments();
+			if (args.length != 1 || !expectedType.equals(args[0].getTypeName())) {
+				continue;
+			}
+			for (Method method : fieldClass.getMethods()) {
+				if (method.getGenericReturnType() == method.getReturnType()) {
+					continue;
+				}
+				try {
+					return (EventLoopGroup) method.invoke(field.get(null));
+				} catch (ReflectiveOperationException ex) {
+					throw Util.propagateReflectThrowable(ex);
 				}
 			}
 		}
-		throw new RuntimeException("Could not locate the server event loop!");
+		return null;
+	}
+
+	private static EventLoopGroup createOwnEventLoopGroup(boolean enableNativeTransport) {
+		// Use NIO as the portable fallback. It does not depend on Paper's NMS classes.
+		EventLoopGroup group = new NioEventLoopGroup();
+		OWNED_EVENT_LOOP_GROUPS.add(group);
+		return group;
+	}
+
+	public static boolean isOwnEventLoopGroup(EventLoopGroup group) {
+		return OWNED_EVENT_LOOP_GROUPS.contains(group);
+	}
+
+	public static void shutdownOwnEventLoopGroup(EventLoopGroup group) {
+		if (group != null && OWNED_EVENT_LOOP_GROUPS.remove(group)) {
+			group.shutdownGracefully();
+		}
 	}
 
 }
