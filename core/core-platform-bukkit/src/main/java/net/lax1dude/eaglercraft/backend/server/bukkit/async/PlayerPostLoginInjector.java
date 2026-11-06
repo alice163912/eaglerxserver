@@ -165,14 +165,17 @@ public class PlayerPostLoginInjector {
 				} else if (sendPacketMethod1 == null && params.length == 1
 						&& params[0].getSimpleName().equals("Packet")) {
 					sendPacketMethod1 = m;
-				} else if (sendPacketMethod3 == null && params.length == 3 && params[0].getSimpleName().equals("Packet")
-						&& params[1].equals(GenericFutureListener.class) && params[2].equals(futureListenerArr)) {
-					sendPacketMethod3 = m;
-					sendPacketMethod2 = null;
-				} else if (sendPacketMethod3 == null && sendPacketMethod2 == null && params.length == 2
-						&& params[0].getSimpleName().equals("Packet")
-						&& params[1].equals(GenericFutureListener.class)) {
-					sendPacketMethod2 = m;
+				} else if (params.length >= 2 && params[0].getSimpleName().equals("Packet")
+						&& (GenericFutureListener.class.isAssignableFrom(params[1])
+								|| params[1].getSimpleName().equals("PacketSendListener"))) {
+					if (params.length == 3 && (params[2] == boolean.class
+							|| params[2].isArray() && GenericFutureListener.class
+									.isAssignableFrom(params[2].getComponentType()))) {
+						sendPacketMethod3 = m;
+						sendPacketMethod2 = null;
+					} else if (params.length == 2 && sendPacketMethod3 == null && sendPacketMethod2 == null) {
+						sendPacketMethod2 = m;
+					}
 				} else if (getHandlerMethod == null && params.length == 0
 						&& m.getReturnType().getSimpleName().equals("PacketListener")) {
 					getHandlerMethod = m;
