@@ -152,8 +152,6 @@ public final class TunnlGGService implements AutoCloseable {
     }
 
     private void runReconnectLoop() {
-        boolean announced = false;
-
         while (running) {
             try {
                 runTunnelSession();
@@ -179,9 +177,7 @@ public final class TunnlGGService implements AutoCloseable {
             }
         }
 
-        if (!announced) {
-            logger.info("tunnl.gg tunnel worker stopped.");
-        }
+        logger.info("tunnl.gg tunnel worker stopped.");
     }
 
     private void runTunnelSession() throws Exception {
@@ -359,7 +355,10 @@ public final class TunnlGGService implements AutoCloseable {
 
                 Matcher urlMatcher = URL_PATTERN.matcher(trimmed);
                 if (urlMatcher.find()) {
-                    logger.info("tunnl.gg is ready! Public Eaglercraft address: " + urlMatcher.group(1));
+                    String httpsUrl = urlMatcher.group(1);
+                    String websocketUrl = "wss://" + httpsUrl.substring("https://".length());
+                    logger.info("tunnl.gg is ready! Browser URL: " + httpsUrl
+                            + " | Eaglercraft WebSocket address: " + websocketUrl);
                 } else {
                     logger.warn("tunnl.gg reported that the tunnel started, but did not provide a URL: " + trimmed);
                 }
