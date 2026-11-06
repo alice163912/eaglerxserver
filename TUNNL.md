@@ -24,6 +24,10 @@ listener=default
 - `enabled`: set to `false` to disable the public tunnel.
 - `listener`: name of the EaglerXServer listener to expose. On a server with only one listener, that listener is selected automatically if the configured name does not exist.
 
+## In-game invite command
+
+Players can use `/tunnel` (aliases: `/invite` and `/convite`) in Minecraft Java to display the public `wss://` address announced by tunnl.gg. The command is available to all players and reports when the tunnel has not finished connecting yet. Share that WebSocket address with friends joining through an Eaglercraft browser client; it is not a Java Edition server address.
+
 The private key is local to the server and must not be shared. Do not delete the `tunnl-gg` folder if you want to retain the same stable URL.
 
 ## Important limitations
