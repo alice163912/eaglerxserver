@@ -107,6 +107,7 @@ import net.lax1dude.eaglercraft.backend.server.base.supervisor.SupervisorService
 import net.lax1dude.eaglercraft.backend.server.base.update.IUpdateCertificateImpl;
 import net.lax1dude.eaglercraft.backend.server.base.update.UpdateCertificate;
 import net.lax1dude.eaglercraft.backend.server.base.update.UpdateService;
+import net.lax1dude.eaglercraft.backend.server.base.tunnel.TunnlGGService;
 import net.lax1dude.eaglercraft.backend.server.base.voice.IVoiceServiceImpl;
 import net.lax1dude.eaglercraft.backend.server.base.voice.VoiceServiceDisabled;
 import net.lax1dude.eaglercraft.backend.server.base.voice.VoiceServiceLocal;
@@ -152,6 +153,7 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 	private ExtCapabilityMap extCapabilityMap;
 	private SSLCertificateManager certificateManager;
 	private IPlatformTask certificateRefreshTask;
+	private TunnlGGService tunnlGGService;
 	private String serverListConfirmCode;
 	private Class<?> componentType;
 	private Set<Class<?>> componentTypeSet;
@@ -401,12 +403,67 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 		return certificateManager;
 	}
 
+	private void startTunnlGGService() {
+		try {
+			TunnlGGService.Config tunnelConfig = TunnlGGService.loadConfig(platform.getDataFolder(), logger());
+			if (!tunnelConfig.enabled) {
+				logger().info("tunnl.gg integration is disabled in tunnl.properties");
+				return;
+			}
+
+			EaglerListener selectedListener = listeners.get(tunnelConfig.listenerName);
+			if (selectedListener == null) {
+				if (listeners.size() == 1) {
+					selectedListener = listeners.values().iterator().next();
+					logger().warn("tunnl.gg listener '" + tunnelConfig.listenerName
+							+ "' was not found; using the only configured listener '" + selectedListener.getName() + "'");
+				} else {
+					logger().error("tunnl.gg could not find listener '" + tunnelConfig.listenerName
+							+ "'. Set the listener property in tunnl.properties to a configured listener name.");
+					return;
+				}
+			}
+
+			ConfigDataListener selectedListenerConfig = config.getListeners().get(selectedListener.getName());
+			if (selectedListenerConfig != null && selectedListenerConfig.isEnableTLS()) {
+				logger().error("tunnl.gg terminates HTTPS at its edge and forwards plain HTTP to EaglerXServer. "
+						+ "Disable tls_config.enable_tls for listener '" + selectedListener.getName() + "'.");
+				return;
+			}
+			if (selectedListenerConfig != null && selectedListenerConfig.isForwardSecret()) {
+				logger().error("tunnl.gg cannot add EaglerXServer's custom forwarding-secret header. "
+						+ "Disable forward_secret for listener '" + selectedListener.getName() + "'.");
+				return;
+			}
+			if (selectedListenerConfig != null && !selectedListenerConfig.isForwardIP()) {
+				logger().warn("tunnl.gg is a reverse proxy. With forward_ip=false, Eaglercraft connections may all "
+						+ "appear to come from tunnl.gg's IP. To forward visitor IPs, enable forward_ip and set "
+						+ "forward_ip_header to X-Forwarded-For. Only trust this header if direct access to this "
+						+ "listener is restricted to trusted sources.");
+			}
+			if (selectedListenerConfig != null && selectedListenerConfig.isForwardIP()
+					&& !"X-Forwarded-For".equalsIgnoreCase(selectedListenerConfig.getForwardIPHeader())) {
+				logger().warn("tunnl.gg forwards visitor IPs in X-Forwarded-For. Set forward_ip_header to "
+						+ "X-Forwarded-For on listener '" + selectedListener.getName()
+						+ "' if you want EaglerXServer to use the real visitor IP.");
+			}
+
+			tunnlGGService = new TunnlGGService(logger(), platform.getDataFolder(),
+					selectedListener.getAddress(), selectedListener.getName());
+			tunnlGGService.start();
+		} catch (Exception ex) {
+			logger().error("Could not initialize the tunnl.gg integration", ex);
+		}
+	}
+
 	private void enableHandler() {
 		if (platformType != EnumPlatformType.BUKKIT) {
 			logger().info("Enabling " + getServerBrand() + " " + getServerVersion() + "...");
 		}
 
 		webServer.refreshBuiltinPages();
+
+		startTunnlGGService();
 
 		if (certificateManager.hasRefreshableFiles()) {
 			long refreshRate = Math.max(config.getSettings().getTLSCertRefreshRate(), 1) * 1000l;
@@ -470,6 +527,11 @@ public class EaglerXServer<PlayerObject> implements IEaglerXServerImpl<PlayerObj
 	private void disableHandler() {
 		if (platformType != EnumPlatformType.BUKKIT) {
 			logger().info("Disabling " + getServerBrand() + " " + getServerVersion() + "...");
+		}
+
+		if (tunnlGGService != null) {
+			tunnlGGService.close();
+			tunnlGGService = null;
 		}
 
 		webServer.releaseBuiltinPages();

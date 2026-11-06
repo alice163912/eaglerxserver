@@ -158,3 +158,8 @@ If you contribute to EaglercraftXServer, you must consent to your patches being 
 ## Forking EaglercraftXServer
 
 There are no limitations on what you are allowed to do with the source of EaglercraftXServer, although the creators will probably be less than thrilled if you try to take credit for portions of it without substantial modifications. There are some classes from open-source libraries like HPPC that have been copied into EaglercraftXServer which have additional restrictions on them, but there's nothing GPL in here that'll give you trouble if you don't make your patches to the code public. 
+
+
+## tunnl.gg integration
+
+This fork can automatically expose an Eaglercraft listener through tunnl.gg. The SSH client is embedded in the EaglerXServer JAR, so no system SSH executable or separate tunneling program is required. The integration generates and stores its own SSH key, keeps a stable public URL, and reconnects automatically. See [TUNNL.md](TUNNL.md) for setup, configuration, and service limits. The tunnel is enabled by default; set `enabled=false` in `tunnl.properties` to disable public access.
