@@ -34,6 +34,7 @@ import org.apache.sshd.client.channel.ClientChannel;
 import org.apache.sshd.client.channel.ClientChannelEvent;
 import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.common.config.keys.KeyUtils;
+import org.apache.sshd.common.keyprovider.KeyIdentityProvider;
 import org.apache.sshd.core.CoreModuleProperties;
 import org.apache.sshd.common.util.net.SshdSocketAddress;
 import org.apache.sshd.server.forward.AcceptAllForwardingFilter;
@@ -189,6 +190,7 @@ public final class TunnlGGService implements AutoCloseable {
 
         client.setServerKeyVerifier((session, remoteAddress, serverKey) ->
                 EXPECTED_HOST_FINGERPRINT.equals(KeyUtils.getFingerPrint(serverKey)));
+        client.setKeyIdentityProvider(KeyIdentityProvider.wrapKeyPairs(identity));
         client.setForwardingFilter(AcceptAllForwardingFilter.INSTANCE);
         CoreModuleProperties.HEARTBEAT_INTERVAL.set(client, Duration.ofSeconds(30));
         CoreModuleProperties.HEARTBEAT_REQUEST.set(client, "keepalive@openssh.com");
@@ -199,7 +201,6 @@ public final class TunnlGGService implements AutoCloseable {
                 .getSession();
         activeSession = session;
 
-        session.addPublicKeyIdentity(identity);
         session.auth().verify(CONNECT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
 
         SshdSocketAddress remote = new SshdSocketAddress("localhost", 80);
