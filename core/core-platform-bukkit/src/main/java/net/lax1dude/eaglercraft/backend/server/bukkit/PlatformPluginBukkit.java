@@ -394,6 +394,7 @@ public class PlatformPluginBukkit extends JavaPlugin implements IPlatform<Player
 
 	@Override
 	public void onDisable() {
+		BukkitUnsafe.shutdownOwnEventLoopGroup(eventLoopGroup);
 		if (aborted) {
 			return;
 		}
