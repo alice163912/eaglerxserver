@@ -394,7 +394,6 @@ public class PlatformPluginBukkit extends JavaPlugin implements IPlatform<Player
 
 	@Override
 	public void onDisable() {
-		BukkitUnsafe.shutdownOwnEventLoopGroup(eventLoopGroup);
 		if (aborted) {
 			return;
 		}
@@ -405,6 +404,7 @@ public class PlatformPluginBukkit extends JavaPlugin implements IPlatform<Player
 		if (onServerDisable != null) {
 			onServerDisable.run();
 		}
+		BukkitUnsafe.shutdownOwnEventLoopGroup(eventLoopGroup);
 		Server server = getServer();
 		for (IEaglerXServerCommandType<Player> cmd : commandsList) {
 			server.getPluginManager().removePermission(cmd.getPermission());
