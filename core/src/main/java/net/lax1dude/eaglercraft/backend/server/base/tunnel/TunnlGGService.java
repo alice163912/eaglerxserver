@@ -84,6 +84,7 @@ public final class TunnlGGService implements AutoCloseable {
     private volatile SshClient activeClient;
     private volatile ClientSession activeSession;
     private volatile ClientChannel activeChannel;
+    private volatile String publicWebSocketAddress;
 
     public static Config loadConfig(File dataFolder, IPlatformLogger logger) throws IOException {
         if (!dataFolder.exists() && !dataFolder.mkdirs()) {
@@ -140,6 +141,11 @@ public final class TunnlGGService implements AutoCloseable {
         this.targetHost = host;
         this.targetPort = address.getPort();
         this.listenerName = listenerName == null ? "default" : listenerName;
+    }
+
+    /** Returns the public WebSocket URL announced by tunnl.gg, or null until ready. */
+    public String getPublicWebSocketAddress() {
+        return publicWebSocketAddress;
     }
 
     public synchronized void start() {
@@ -362,6 +368,7 @@ public final class TunnlGGService implements AutoCloseable {
                 if (urlMatcher.find()) {
                     String httpsUrl = urlMatcher.group(1);
                     String websocketUrl = "wss://" + httpsUrl.substring("https://".length());
+                    publicWebSocketAddress = websocketUrl;
                     logger.info("tunnl.gg is ready! Browser URL: " + httpsUrl
                             + " | Eaglercraft WebSocket address: " + websocketUrl);
                 } else {
