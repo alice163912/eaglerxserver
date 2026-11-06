@@ -7,7 +7,7 @@ EaglerXServer can expose its configured Eaglercraft listener through [tunnl.gg](
 - On startup, EaglerXServer creates a small `tunnl.properties` file if it does not exist.
 - The integration is enabled by default and opens an SSH reverse tunnel to `proxy.tunnl.gg`.
 - Apache MINA SSHD is bundled inside the EaglerXServer JAR. No external `ssh`, `autossh`, or tunneling program is required.
-- An Ed25519 SSH identity is generated automatically and stored under `plugins/EaglercraftXServer/tunnl-gg/`. The same identity is reused so the public address remains stable after restarts.
+- An RSA-3072 SSH identity is generated automatically and stored under `plugins/EaglercraftXServer/tunnl-gg/`. The same identity is reused so the public address remains stable after restarts.
 - The SSH server host key is checked against tunnl.gg's published SHA-256 fingerprint.
 - If the SSH session drops or tunnl.gg closes the free tunnel because of its time limits, EaglerXServer reconnects automatically.
 - The tunnel is closed when EaglerXServer shuts down.
