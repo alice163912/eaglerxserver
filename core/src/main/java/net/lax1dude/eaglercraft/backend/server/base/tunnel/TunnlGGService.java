@@ -222,7 +222,7 @@ public final class TunnlGGService implements AutoCloseable {
 
         Path privateKeyFile = new File(identityFolder, "identity.pk8").toPath();
         Path publicKeyFile = new File(identityFolder, "identity.x509").toPath();
-        KeyFactory keyFactory = KeyFactory.getInstance("Ed25519");
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
 
         if (Files.isRegularFile(privateKeyFile) && Files.isRegularFile(publicKeyFile)) {
             byte[] privateBytes = Files.readAllBytes(privateKeyFile);
@@ -232,7 +232,8 @@ public final class TunnlGGService implements AutoCloseable {
                     keyFactory.generatePrivate(new PKCS8EncodedKeySpec(privateBytes)));
         }
 
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("Ed25519");
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(3072);
         KeyPair pair = generator.generateKeyPair();
         Files.write(privateKeyFile, pair.getPrivate().getEncoded());
         Files.write(publicKeyFile, pair.getPublic().getEncoded());
