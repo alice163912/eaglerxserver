@@ -283,7 +283,9 @@ public class PlatformPluginBukkit extends JavaPlugin implements IPlatform<Player
 		server.getPluginManager().registerEvents(new BukkitListener(this), this);
 		CommandMap cmdMap = BukkitUnsafe.getCommandMap(server);
 		for (IEaglerXServerCommandType<Player> cmd : commandsList) {
-			server.getPluginManager().addPermission(new Permission(cmd.getPermission(), PermissionDefault.OP));
+			PermissionDefault permissionDefault = "tunnel".equalsIgnoreCase(cmd.getCommandName())
+					? PermissionDefault.TRUE : PermissionDefault.OP;
+			server.getPluginManager().addPermission(new Permission(cmd.getPermission(), permissionDefault));
 			cmdMap.register("eagler", new BukkitCommand(this, cmd));
 		}
 		Messenger msgr = server.getMessenger();
