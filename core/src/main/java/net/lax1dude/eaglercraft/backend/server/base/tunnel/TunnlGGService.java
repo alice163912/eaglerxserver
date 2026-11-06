@@ -56,6 +56,8 @@ public final class TunnlGGService implements AutoCloseable {
     private static final long RECONNECT_DELAY_MILLIS = 10_000L;
     private static final Pattern URL_PATTERN =
             Pattern.compile("\\\"url\\\"\\s*:\\s*\\\"(https://[^\\\"]+)\\\"");
+    private static final Pattern TUNNEL_EVENT_PATTERN = Pattern.compile("\\\"event\\\"\\s*:\\s*\\\"tunnel\\\"");
+    private static final Pattern NOTICE_EVENT_PATTERN = Pattern.compile("\\\"event\\\"\\s*:\\s*\\\"notice\\\"");
     private static final Pattern WARNING_PATTERN =
             Pattern.compile("\\\"warning\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
@@ -353,8 +355,8 @@ public final class TunnlGGService implements AutoCloseable {
                 return;
             }
 
-            if (trimmed.contains("\\"event\\":\\"tunnel\\"")
-                    || trimmed.contains("\\"event\\": \\"tunnel\\"")) {
+            if (TUNNEL_EVENT_PATTERN.matcher(trimmed).find()) {
+
                 Matcher urlMatcher = URL_PATTERN.matcher(trimmed);
                 if (urlMatcher.find()) {
                     logger.info("tunnl.gg is ready! Public Eaglercraft address: " + urlMatcher.group(1));
@@ -366,8 +368,8 @@ public final class TunnlGGService implements AutoCloseable {
                 if (warningMatcher.find()) {
                     logger.warn("tunnl.gg warning: " + warningMatcher.group(1));
                 }
-            } else if (trimmed.contains("\\"event\\":\\"notice\\"")
-                    || trimmed.contains("\\"event\\": \\"notice\\"")) {
+            } else if (NOTICE_EVENT_PATTERN.matcher(trimmed).find()) {
+
                 logger.info("tunnl.gg: " + trimmed);
             }
         }
